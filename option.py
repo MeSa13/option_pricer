@@ -6,17 +6,6 @@ import random
 from scipy import special
 import copy
 
-
-class Delta:
-    def __init__(self,op,eps=10.0**-3):
-        self.option=op
-        self.eps=eps
-    def EUcall_analytic(self):
-        op_eps=copy.deepcopy(self.option)
-        op_eps.stock.price+=Delta.eps
-        return (self.option.EUcall_analytic)
-    
-
     
     
 class asset:
@@ -137,9 +126,3 @@ MC=op.EU_MC(sample=10000,lchain=1000)
 print op.EUcall_analytic(),op.EUput_analytic(), op.Delta_EUcall_analytic(),op.Delta_EUput_analytic()
 print MC
 print op.EUcall_binom(),op.EUput_binom()
-
-print op.EUcall_analytic()+op.strickp*exp(-op.interest*op.strickt)-google.price-op.EUput_analytic()
-print op.EUcall_binom()+op.strickp*exp(-op.interest*op.strickt)-google.price-op.EUput_binom()
-print MC[0]+op.strickp*exp(-op.interest*op.strickt)-google.price-MC[1]
-
-
