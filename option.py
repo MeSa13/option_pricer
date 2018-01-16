@@ -6,6 +6,7 @@ import random
 from scipy import special
 import copy
 
+##
     
     
 class asset:
@@ -126,3 +127,9 @@ MC=op.EU_MC(sample=10000,lchain=1000)
 print op.EUcall_analytic(),op.EUput_analytic(), op.Delta_EUcall_analytic(),op.Delta_EUput_analytic()
 print MC
 print op.EUcall_binom(),op.EUput_binom()
+
+print op.EUcall_analytic()+op.strickp*exp(-op.interest*op.strickt)-google.price-op.EUput_analytic()
+print op.EUcall_binom()+op.strickp*exp(-op.interest*op.strickt)-google.price-op.EUput_binom()
+print MC[0]+op.strickp*exp(-op.interest*op.strickt)-google.price-MC[1]
+
+
