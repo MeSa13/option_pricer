@@ -6,17 +6,6 @@ import random
 from scipy import special
 import copy
 
-
-class Delta:
-    def __init__(self,op,eps=10.0**-3):
-        self.option=op
-        self.eps=eps
-    def EUcall_analytic(self):
-        op_eps=copy.deepcopy(self.option)
-        op_eps.stock.price+=Delta.eps
-        return (self.option.EUcall_analytic)
-    
-
     
     
 class asset:
