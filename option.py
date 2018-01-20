@@ -15,6 +15,12 @@ import copy
 #    def __str__(self):
 #        return "current asset price=%s and volatility=%s"% (self.price,self.vol)
 
+def gauss_seed(lchain):
+    z=[]
+    for i in range(lchain):
+        dz=random.gauss(0.0,1.0)
+        z.append(dz)
+    return z
 
 class option:
     """option of a given asset with price s, volatility vol, strick price K, maturity time T and interest rate r"""
@@ -56,50 +62,43 @@ class option:
         else:
             return out[0]
         
-    def EU_MC(self,ty,sample=1000,lchain=100,eps=10.0**-3):
+    def simulate(self,z):
+        s=[self.asset]
+        dt=self.strickt/len(z)
+        for i in range(len(z)):
+            coeff=self.interest*dt+self.vol*sqrt(dt)*z[i]
+            s.append(s[i]*(1+coeff))
+        return s
+
+    def MC_1sample(self,ty,z):
+        s=self.simulate(z)
+        if ty == "c":
+            return (exp(-self.interest*self.strickt)*max(s[len(s)-1] - self.strickp , 0))
+        elif ty == "p":
+            return (exp(-self.interest*self.strickt)*max(self.strickp - s[len(s)-1]  , 0))
+    
+    def MC(self,ty,sample=1000,lchain=100):
         """European option pricing using Monte Carlo method. ty determines the
         option type. 'c' for call and 'p' for put.
         sample determines the number of simulations. lchain determines
         the length of each simulated chain.
         if ty is a character, it returns (option price,Delta).
         if ty is a string, it returns a list of (option price,Delta)"""
-        #Q: I implemented Delta and pricing together. It seems to me doing them
-        #separate is not technically correct. 
-        c=[]
-        p=[]
-        c_eps=[]
-        p_eps=[]
-        s=self.asset
-        s_eps=s+eps
-        k=self.strickp
-        sigma=self.vol
-        t=self.strickt
         r=self.interest
+        t=self.strickt
         dt=t/lchain
-        for j in range(sample):
-            s_t=s
-            s_t_eps=s_eps
-            for i in range(lchain):
-                dz=random.gauss(0.0,1.0)
-                coeff=r*dt+sigma*sqrt(dt)*dz
-                s_t=s_t*(1+coeff)
-                s_t_eps=s_t_eps*(1+coeff)
-            c.append(exp(-r*t)*max(s_t - k,0))
-            p.append(exp(-r*t)*max(k - s_t,0))
-            c_eps.append(exp(-r*t)*max(s_t_eps - k,0))
-            p_eps.append(exp(-r*t)*max(k - s_t_eps,0))
-        c_price=sum(c)/sample
-        p_price=sum(p)/sample
-        c_eps_price=sum(c_eps)/sample
-        p_eps_price=sum(p_eps)/sample
         out=[]
         for char in ty:
-            if char=="c":
-                out.append((c_price,(c_eps_price - c_price)/eps))
-            elif char=="p":
-                out.append((p_price,(p_eps_price - p_price)/eps))               
+            if char in "cp":
+                price_list=[]
+                for j in range(sample):
+                    z=gauss_seed(lchain)
+                    s=self.simulate(z)
+                    price=self.MC_1sample(char,z)
+                    price_list.append(price)
+                out.append(sum(price_list)/sample)
             else:
-                out.append((None,None))
+                out.append(None)
         if len(ty)>1:
             return out
         else:
@@ -136,7 +135,7 @@ class option:
         return (p*op_up.binomial(ty,lchain-1)+(1-p)*op_down.binomial(ty,lchain-1))/a
 
     def Delta_EU_analytic(self,ty,eps=10.0**-3):
-        """Calculates the Delta of European option using EU_analytic pricer.
+        """Calculates the Delta of European option using the EU_analytic pricer.
         ty determines the option type."""
         temp_op=copy.deepcopy(self)
         temp_op.asset += eps
@@ -151,10 +150,35 @@ class option:
         else:
             return out[0]
 
+    def Delta_MC(self,ty,sample=1000,lchain=100,eps=10.0**-3):
+        r=self.interest
+        t=self.strickt
+        dt=t/lchain
+        out=[]
+        for char in ty:
+            if char in "cp":
+                Delta_list=[]
+                for j in range(sample):
+                    z=gauss_seed(lchain)
+                    temp_op=copy.deepcopy(self)
+                    temp_op.asset += eps
+                    price1=self.MC_1sample(char,z)
+                    price2=temp_op.MC_1sample(char,z)
+                    Delta_list.append((price2 - price1)/eps)
+                out.append(sum(Delta_list)/sample)
+            else:
+                out.append(None)
+        if len(ty)>1:
+            return out
+        else:
+            return out[0]
+       
+
     
 op=option(100.0,0.3,100.0,1.0,0.1)
 
 print op.EU_analytic("cpd")
-print op.EU_MC("cpd")
+print op.MC("cpd")
 print op.binomial("cpd")
 print op.Delta_EU_analytic("cpd")
+print op.Delta_MC("cpf")
