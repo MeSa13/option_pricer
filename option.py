@@ -1,184 +1,156 @@
-from math import *
-#import numpy as np
-#from numpy import linspace
-#import matplotlib.pyplot as plt  
-import random
-from scipy import special
+# from numpy import linspace
+# import matplotlib.pyplot as plt
+import numpy as np
+import scipy.stats
 import copy
-    
-    
-#class asset:
-#    """asset with a given price and volatility"""
-#    def __init__(self,price,vol):
-#        self.price=price
-#        self.vol=vol
-#    def __str__(self):
-#        return "current asset price=%s and volatility=%s"% (self.price,self.vol)
 
-def gauss_seed(lchain):
-    z=[]
-    for i in range(lchain):
-        dz=random.gauss(0.0,1.0)
-        z.append(dz)
-    return z
 
-class option:
-    """option of a given asset with price s, volatility vol, strick price K, maturity time T and interest rate r"""
-    def __init__(self,s,vol,K,T,r):
-        self.asset=s
-        self.vol=vol
-        self.strickp=K
-        self.strickt=T
-        self.interest=r
-        
+class Asset:
+    """asset with a given price and volatility"""
+
+    def __init__(self, price, vol):
+        self.price = price
+        self.vol = vol
+
     def __str__(self):
-        return "Option of an asset with price %s, vol %s, strick price %s, maturity time %s year(s) and risk-free interest rate %s per year"%(self.asset,self.vol,self.strickp,self.strickt,self.interest)
-    
-    def EU_analytic(self,ty):
-        """price of European options using Black-Scholes-Merton analytic
-        formula. ty (can be a character or a list of characters) determines the option type.
-        'c' for call and 'p' for put.
-        if ty is one character, it returns the option price. if ty is a string,
-        it returns a list of option prices."""
-        s=self.asset
-        k=self.strickp
-        sigma=self.vol
-        t=self.strickt
-        r=self.interest
-        d1=(log(s/k)+(r+sigma**2/2)*t)/(sigma*sqrt(t))
-        d2=d1-sigma*sqrt(t)
-        out=[]
-        for char in ty:
-            if char=="c": #call option
-                c= s/2*(1+special.erf(d1/sqrt(2)))-k*exp(-r*t)/2*(1+special.erf(d2/sqrt(2)))
-                out.append(c)
-            elif char=="p": #put option
-                p= k*exp(-r*t)/2*(1+special.erf(-d2/sqrt(2)))-s/2*(1+special.erf(-d1/sqrt(2)))
-                out.append(p)
-            else:
-                out.append(None)
-        if len(ty)>1:
-            return out
+        return "current asset price=%s and volatility=%s" % (self.price, self.vol)
+
+    def simulate(self, time, interest_rate, size=None):
+        wiener_process = np.random.normal(0.0, 1.0, size)
+        if len(wiener_process.shape) == 1:
+            number_simulation = 1
+            steps = wiener_process.shape[0]
+            dt = time / steps
+        elif len(wiener_process.shape) == 2:
+            number_simulation = wiener_process.shape[0]
+            steps = wiener_process.shape[1]
+            dt = time / steps
         else:
-            return out[0]
-        
-    def simulate(self,z):
-        s=[self.asset]
-        dt=self.strickt/len(z)
-        for i in range(len(z)):
-            coeff=self.interest*dt+self.vol*sqrt(dt)*z[i]
-            s.append(s[i]*(1+coeff))
-        return s
+            return "size is not right!"
+        wiener_process.shape = (number_simulation, steps)
+        movement_coefficient = 1 + interest_rate * dt + self.vol * np.sqrt(dt) * wiener_process
+        simulated_price = np.ones((number_simulation, 1)) * self.price
+        for i in range(steps):
+            new_price = simulated_price[:, i] * movement_coefficient[:, i]
+            new_price.shape = (number_simulation, 1)
+            simulated_price = np.append(simulated_price, new_price, axis=1)
+        return simulated_price
 
-    def MC_1sample(self,ty,z):
-        s=self.simulate(z)
-        if ty == "c":
-            return (exp(-self.interest*self.strickt)*max(s[len(s)-1] - self.strickp , 0))
-        elif ty == "p":
-            return (exp(-self.interest*self.strickt)*max(self.strickp - s[len(s)-1]  , 0))
-    
-    def MC(self,ty,sample=1000,lchain=100):
-        """European option pricing using Monte Carlo method. ty determines the
-        option type. 'c' for call and 'p' for put.
-        sample determines the number of simulations. lchain determines
-        the length of each simulated chain.
-        if ty is a character, it returns (option price,Delta).
-        if ty is a string, it returns a list of (option price,Delta)"""
-        r=self.interest
-        t=self.strickt
-        dt=t/lchain
-        out=[]
-        for char in ty:
-            if char in "cp":
-                price_list=[]
-                for j in range(sample):
-                    z=gauss_seed(lchain)
-                    s=self.simulate(z)
-                    price=self.MC_1sample(char,z)
-                    price_list.append(price)
-                out.append(sum(price_list)/sample)
-            else:
-                out.append(None)
-        if len(ty)>1:
-            return out
-        else:
-            return out[0]
-        
-    def binomial(self,ty,lchain=10):
-        """European call option pricing using binomial method. lchain determines
-        the length of the binomial tree.
-        ty determines the option type. if ty is a character, it returns the option price.
-        if ty is a string, it returns a list of option prices."""
-        if len(ty)>1: #to break down ty into its characters
-            out=[]
-            for char in ty:
-                out.append(self.binomial(char,lchain))
-            return out
-        if not (ty in "cp"):
-            return None
-        if lchain==0 and ty=="c": #value at the final node
-            return max(self.asset - self.strickp,0)
-        if lchain==0 and ty=="p": #value at the final node
-            return max(self.strickp - self.asset,0)
-        dt=self.strickt/lchain
-        a=exp(self.interest*dt) #Q: these numbers do not change.
-        #Is there a way to carry them out and not calculate them every time?
-        u=exp(self.vol*sqrt(dt))
-        d=exp(-self.vol*sqrt(dt))
-        p=(a-d)/(u-d)
-        op_up=copy.deepcopy(self) #representing the option in up node
-        op_down=copy.deepcopy(self) #representing the option in down node
-        op_up.strickt -= dt
-        op_down.strickt -= dt
-        op_up.asset=u*self.asset
-        op_down.asset=d*self.asset
-        return (p*op_up.binomial(ty,lchain-1)+(1-p)*op_down.binomial(ty,lchain-1))/a
 
-    def Delta_EU_analytic(self,ty,eps=10.0**-3):
-        """Calculates the Delta of European option using the EU_analytic pricer.
-        ty determines the option type."""
-        temp_op=copy.deepcopy(self)
-        temp_op.asset += eps
-        out=[]
-        for char in ty:
-            if char in "cp":
-                out.append((temp_op.EU_analytic(char) - self.EU_analytic(char))/eps)
-            else:
-                out.append(None)
-        if len(ty)>1:
-            return out
-        else:
-            return out[0]
+class Option:
+    """option of a given asset, strike price, maturity time and interest rate"""
 
-    def Delta_MC(self,ty,sample=1000,lchain=100,eps=10.0**-3):
-        r=self.interest
-        t=self.strickt
-        dt=t/lchain
-        out=[]
-        for char in ty:
-            if char in "cp":
-                Delta_list=[]
-                for j in range(sample):
-                    z=gauss_seed(lchain)
-                    temp_op=copy.deepcopy(self)
-                    temp_op.asset += eps
-                    price1=self.MC_1sample(char,z)
-                    price2=temp_op.MC_1sample(char,z)
-                    Delta_list.append((price2 - price1)/eps)
-                out.append(sum(Delta_list)/sample)
-            else:
-                out.append(None)
-        if len(ty)>1:
-            return out
-        else:
-            return out[0]
-       
+    def __init__(self, asset, strike_price, maturity_time, interest_rate):
+        self.asset = asset
+        self.strike_price = strike_price
+        self.maturity_time = maturity_time
+        self.interest_rate = interest_rate
 
-    
-op=option(100.0,0.3,100.0,1.0,0.1)
+    def __str__(self):
+        return "Option of an asset with price %s, vol %s, strike price %s, maturity time %s year(s) and risk-free " \
+               "interest rate %s per year" % (
+                   self.asset.price, self.asset.vol, self.strike_price, self.maturity_time, self.interest_rate)
 
-print op.EU_analytic("cpd")
-print op.MC("cpd")
-print op.binomial("cpd")
-print op.Delta_EU_analytic("cpd")
-print op.Delta_MC("cpf")
+
+class PutOption(Option):
+    """something here!"""
+
+    def __init__(self, asset, strike_price, maturity_time, interest_rate):
+        Option.__init__(self, asset, strike_price, maturity_time, interest_rate)
+
+    def analytic_price(self):
+        """price of European options using Black-Scholes-Merton analytic formula."""
+        d1 = (np.log(self.asset.price / self.strike_price)
+              + (self.interest_rate + self.asset.vol ** 2 / 2) * self.maturity_time) \
+             / (self.asset.vol * np.sqrt(self.maturity_time))
+        d2 = d1 - self.asset.vol * np.sqrt(self.maturity_time)
+        price = self.strike_price * np.exp(-self.interest_rate * self.maturity_time) * scipy.stats.norm.cdf(-d2) \
+                - self.asset.price * scipy.stats.norm.cdf(-d1)
+        return price
+
+    def binomial_price(self, len_chain=10):
+        """option pricing using binomial method. len_chain determines
+        the length of the binomial tree."""
+        if len_chain == 0:  # value at the final node
+            return max(self.strike_price - self.asset.price, 0)
+        dt = self.maturity_time / len_chain
+        a = np.exp(self.interest_rate * dt)  # Q: these numbers do not change.
+        # Is there a way to carry them out and not calculate them every time?
+        u = np.exp(self.asset.vol * np.sqrt(dt))
+        d = np.exp(-self.asset.vol * np.sqrt(dt))
+        p = (a - d) / (u - d)
+        option_up = copy.deepcopy(self)  # representing the option in up node
+        option_down = copy.deepcopy(self)  # representing the option in down node
+        option_up.maturity_time -= dt
+        option_down.maturity_time -= dt
+        option_up.asset.price = u * self.asset.price
+        option_down.asset.price = d * self.asset.price
+        return (p * option_up.binomial_price(len_chain - 1) + (1 - p) * option_down.binomial_price(len_chain - 1)) / a
+
+    def monte_carlo_price(self, sample=1000, len_chain=100):
+        """option pricing using Monte Carlo method.
+        sample: number of simulations
+        len_chain: length of each simulated chain"""
+        simulations = self.asset.simulate(self.maturity_time, self.interest_rate, size=(sample, len_chain))
+        asset_price = simulations[:, -1]
+        payoff = np.exp(-self.interest_rate * self.maturity_time) * np.maximum(self.strike_price - asset_price, 0)
+        price = np.mean(payoff)
+        price_std = np.std(payoff)
+        return price, price_std
+
+
+class CallOption(Option):
+    """something here!"""
+
+    def __init__(self, asset, strike_price, maturity_time, interest_rate):
+        Option.__init__(self, asset, strike_price, maturity_time, interest_rate)
+
+    def analytic_price(self):
+        """price of European options using Black-Scholes-Merton analytic formula."""
+        d1 = (np.log(self.asset.price / self.strike_price)
+              + (self.interest_rate + self.asset.vol ** 2 / 2) * self.maturity_time) / (
+                     self.asset.vol * np.sqrt(self.maturity_time))
+        d2 = d1 - self.asset.vol * np.sqrt(self.maturity_time)
+        price = - self.strike_price * np.exp(-self.interest_rate * self.maturity_time) * scipy.stats.norm.cdf(d2) \
+                + self.asset.price * scipy.stats.norm.cdf(d1)
+        return price
+
+    def binomial_price(self, len_chain=10):
+        """option pricing using binomial method. len_chain determines
+        the length of the binomial tree."""
+        if len_chain == 0:  # value at the final node
+            return max(self.asset.price - self.strike_price, 0)
+        dt = self.maturity_time / len_chain
+        a = np.exp(self.interest_rate * dt)  # Q: these numbers do not change.
+        # Is there a way to carry them out and not calculate them every time?
+        u = np.exp(self.asset.vol * np.sqrt(dt))
+        d = np.exp(-self.asset.vol * np.sqrt(dt))
+        p = (a - d) / (u - d)
+        option_up = copy.deepcopy(self)  # representing the option in up node
+        option_down = copy.deepcopy(self)  # representing the option in down node
+        # does not work with copy.copy!
+        option_up.maturity_time -= dt
+        option_down.maturity_time -= dt
+        option_up.asset.price = u * self.asset.price
+        option_down.asset.price = d * self.asset.price
+        return (p * option_up.binomial_price(len_chain - 1) + (1 - p) * option_down.binomial_price(len_chain - 1)) / a
+
+    def monte_carlo_price(self, sample=1000, len_chain=100):
+        """option pricing using Monte Carlo method.
+        sample: number of simulations
+        len_chain: length of each simulated chain"""
+        simulations = self.asset.simulate(self.maturity_time, self.interest_rate, size=(sample, len_chain))
+        asset_price = simulations[:, -1]
+        payoff = np.exp(-self.interest_rate * self.maturity_time) * np.maximum(asset_price - self.strike_price, 0)
+        price = np.mean(payoff)
+        price_std = np.std(payoff)
+        return price, price_std
+
+
+stock = Asset(100.0, 0.3)
+call = CallOption(stock, 100.0, 0.2, 0.1)
+put = PutOption(stock, 100.0, 0.2, 0.1)
+print(call.analytic_price(), put.analytic_price())
+print(call.binomial_price(), put.binomial_price())
+print(call.monte_carlo_price(), put.monte_carlo_price())
+print("Done!")
