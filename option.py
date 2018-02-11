@@ -71,6 +71,17 @@ class Option:
         price = np.exp(-self.interest_rate * self.maturity_time) * np.mean(payoff_list)
         return price
 
+    def delta(self, pricer, *args, eps=10 ** -3):
+        st = np.random.get_state()
+        price1 = pricer(self, *args)
+        #self_copy = copy.deepcopy(self)
+        self.asset.price += eps
+        np.random.set_state(st)
+        price2 = pricer(self, *args)
+        self.asset.price -= eps
+        return (price2 - price1) / eps
+    # it works, but I think it's very confusing!
+
 
 class PutOption(Option):
     """something here!"""
@@ -129,4 +140,7 @@ put = PutOption(stock, 100.0, 0.2, 0.1)
 print(call.analytic_price(), put.analytic_price())
 print(call.binomial_price(), put.binomial_price())
 print(call.monte_carlo_price(), put.monte_carlo_price())
-#print("Done!")
+print(call.delta(CallOption.analytic_price), put.delta(PutOption.analytic_price))
+print(call.delta(CallOption.binomial_price), put.delta(PutOption.binomial_price))
+print(call.delta(CallOption.monte_carlo_price, 10000), put.delta(PutOption.monte_carlo_price, 10))
+
