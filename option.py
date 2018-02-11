@@ -71,13 +71,13 @@ class Option:
         price = np.exp(-self.interest_rate * self.maturity_time) * np.mean(payoff_list)
         return price
 
-    def delta(self, pricer, *args, eps=10 ** -3):
+    def delta_generic(self, pricer, payoff, eps, *args):
         st = np.random.get_state()
-        price1 = pricer(self, *args)
+        price1 = pricer(self, payoff, *args)
         #self_copy = copy.deepcopy(self)
         self.asset.price += eps
         np.random.set_state(st)
-        price2 = pricer(self, *args)
+        price2 = pricer(self, payoff, *args)
         self.asset.price -= eps
         return (price2 - price1) / eps
     # it works, but I think it's very confusing!
@@ -107,6 +107,9 @@ class PutOption(Option):
         steps: length of each simulated chain"""
         return Option.monte_carlo(self, lambda s: np.maximum(self.strike_price - s, 0), number_simulation, steps)
 
+    def delta(self, pricer, *args, eps=10 ** -3):
+        return Option.delta_generic(self, pricer, lambda s: np.maximum(self.strike_price - s, 0), eps, *args)
+
 
 class CallOption(Option):
     """something here!"""
@@ -132,6 +135,9 @@ class CallOption(Option):
         steps: length of each simulated chain"""
         return Option.monte_carlo(self, lambda s: np.maximum(s - self.strike_price, 0), number_simulation, steps)
 
+    def delta(self, pricer, *args, eps=10 ** -3):
+        return Option.delta_generic(self, pricer, lambda s: np.maximum(s - self.strike_price, 0), eps, *args)
+
 
 stock = Asset(100.0, 0.3)
 call = CallOption(stock, 100.0, 0.2, 0.1)
@@ -140,7 +146,7 @@ put = PutOption(stock, 100.0, 0.2, 0.1)
 print(call.analytic_price(), put.analytic_price())
 print(call.binomial_price(), put.binomial_price())
 print(call.monte_carlo_price(), put.monte_carlo_price())
-print(call.delta(CallOption.analytic_price), put.delta(PutOption.analytic_price))
-print(call.delta(CallOption.binomial_price), put.delta(PutOption.binomial_price))
-print(call.delta(CallOption.monte_carlo_price, 10000), put.delta(PutOption.monte_carlo_price, 10))
+#print(call.delta(Option.analytic_price), put.delta(Option.analytic_price))
+print(call.delta(Option.binomial), put.delta(Option.binomial))
+print(call.delta(Option.monte_carlo, 10000), put.delta(Option.monte_carlo))
 
