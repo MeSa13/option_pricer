@@ -60,6 +60,7 @@ class Option:
         u_option.asset.price = u * self.asset.price
         d_option.asset.price = d * self.asset.price
         return (p * u_option.binomial(payoff, step - 1) + (1 - p) * d_option.binomial(payoff, step - 1)) / a
+        # QQ: this is really slow even when step = 20!!
 
     def monte_carlo(self, payoff, number_simulation=1000, steps=100):
         """option pricing using Monte Carlo method.
@@ -74,13 +75,42 @@ class Option:
     def delta_generic(self, pricer, payoff, eps, *args):
         st = np.random.get_state()
         price1 = pricer(self, payoff, *args)
-        #self_copy = copy.deepcopy(self)
         self.asset.price += eps
         np.random.set_state(st)
         price2 = pricer(self, payoff, *args)
         self.asset.price -= eps
         return (price2 - price1) / eps
     # it works, but I think it's very confusing!
+
+    def gamma_generic(self, pricer, payoff, eps, *args):
+        st = np.random.get_state()
+        price1 = pricer(self, payoff, *args)
+        self.asset.price += eps
+        np.random.set_state(st)
+        price2 = pricer(self, payoff, *args)
+        self.asset.price -= 2*eps
+        np.random.set_state(st)
+        price3 = pricer(self, payoff, *args)
+        self.asset.price += eps
+        return (price2 + price3 - 2*price1) / eps ** 2
+
+    def vega_generic(self, pricer, payoff, eps, *args):
+        st = np.random.get_state()
+        price1 = pricer(self, payoff, *args)
+        self.asset.vol += eps
+        np.random.set_state(st)
+        price2 = pricer(self, payoff, *args)
+        self.asset.vol -= eps
+        return 0.01 * (price2 - price1) / eps
+
+    def rho_generic(self, pricer, payoff, eps, *args):
+        st = np.random.get_state()
+        price1 = pricer(self, payoff, *args)
+        self.interest_rate += eps
+        np.random.set_state(st)
+        price2 = pricer(self, payoff, *args)
+        self.interest_rate -= eps
+        return 0.01 * (price2 - price1) / eps
 
 
 class PutOption(Option):
@@ -96,19 +126,31 @@ class PutOption(Option):
                 - self.asset.price * scipy.stats.norm.cdf(-d1)
         return price
 
+    def payoff(self):
+        return lambda s: np.maximum(self.strike_price - s, 0)
+
     def binomial_price(self, step=10):
         """option pricing using binomial method. len_chain determines
         the length of the binomial tree."""
-        return Option.binomial(self, lambda s: max(self.strike_price - s, 0), step)
+        return Option.binomial(self, self.payoff(), step)
 
     def monte_carlo_price(self, number_simulation=1000, steps=100):
         """option pricing using Monte Carlo method.
         number_simulation: number of simulations
         steps: length of each simulated chain"""
-        return Option.monte_carlo(self, lambda s: np.maximum(self.strike_price - s, 0), number_simulation, steps)
+        return Option.monte_carlo(self, self.payoff(), number_simulation, steps)
 
     def delta(self, pricer, *args, eps=10 ** -3):
-        return Option.delta_generic(self, pricer, lambda s: np.maximum(self.strike_price - s, 0), eps, *args)
+        return Option.delta_generic(self, pricer, self.payoff(), eps, *args)
+
+    def gamma(self, pricer, *args, eps=10 ** -1):
+        return Option.gamma_generic(self, pricer, self.payoff(), eps, *args)
+
+    def vega(self, pricer, *args, eps=10 ** -3):
+        return Option.vega_generic(self, pricer, self.payoff(), eps, *args)
+
+    def rho(self, pricer, *args, eps=10 ** -3):
+        return Option.rho_generic(self, pricer, self.payoff(), eps, *args)
 
 
 class CallOption(Option):
@@ -124,29 +166,50 @@ class CallOption(Option):
                 + self.asset.price * scipy.stats.norm.cdf(d1)
         return price
 
+    def payoff(self):
+        return lambda s: np.maximum(s - self.strike_price, 0)
+
     def binomial_price(self, step=10):
         """option pricing using binomial method. step determines
         the length of the binomial tree."""
-        return Option.binomial(self, lambda s: max(s - self.strike_price, 0), step)
+        return Option.binomial(self, self.payoff(), step)
 
     def monte_carlo_price(self, number_simulation=1000, steps=100):
         """option pricing using Monte Carlo method.
         number_simulation: number of simulations
         steps: length of each simulated chain"""
-        return Option.monte_carlo(self, lambda s: np.maximum(s - self.strike_price, 0), number_simulation, steps)
+        return Option.monte_carlo(self, self.payoff(), number_simulation, steps)
 
     def delta(self, pricer, *args, eps=10 ** -3):
-        return Option.delta_generic(self, pricer, lambda s: np.maximum(s - self.strike_price, 0), eps, *args)
+        return Option.delta_generic(self, pricer, self.payoff(), eps, *args)
+
+    def gamma(self, pricer, *args, eps=10 ** -1):
+        return Option.gamma_generic(self, pricer, self.payoff(), eps, *args)
+
+    def vega(self, pricer, *args, eps=10 ** -3):
+        return Option.vega_generic(self, pricer, self.payoff(), eps, *args)
+
+    def rho(self, pricer, *args, eps=10 ** -3):
+        return Option.rho_generic(self, pricer, self.payoff(), eps, *args)
 
 
 stock = Asset(100.0, 0.3)
-call = CallOption(stock, 100.0, 0.2, 0.1)
-put = PutOption(stock, 100.0, 0.2, 0.1)
+call = CallOption(stock, 100.0, 0.1, 0.1)
+put = PutOption(stock, 100.0, 0.1, 0.1)
 
 print(call.analytic_price(), put.analytic_price())
 print(call.binomial_price(), put.binomial_price())
-print(call.monte_carlo_price(), put.monte_carlo_price())
-#print(call.delta(Option.analytic_price), put.delta(Option.analytic_price))
-print(call.delta(Option.binomial), put.delta(Option.binomial))
-print(call.delta(Option.monte_carlo, 10000), put.delta(Option.monte_carlo))
+print(call.monte_carlo_price(), put.monte_carlo_price(), "\n")
 
+print(call.delta(Option.binomial), put.delta(Option.binomial))
+print(call.delta(Option.monte_carlo), put.delta(Option.monte_carlo), "\n")
+
+print(call.gamma(Option.binomial), put.gamma(Option.binomial))
+print(call.gamma(Option.monte_carlo, 10000), put.gamma(Option.monte_carlo, 10000), "\n")
+# binomial gamma is way off
+
+print(call.vega(Option.binomial), put.vega(Option.binomial))
+print(call.vega(Option.monte_carlo), put.vega(Option.monte_carlo), "\n")
+
+print(call.rho(Option.binomial), put.rho(Option.binomial))
+print(call.rho(Option.monte_carlo), put.rho(Option.monte_carlo))
