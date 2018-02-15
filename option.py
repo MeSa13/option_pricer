@@ -213,3 +213,5 @@ print(call.vega(Option.monte_carlo), put.vega(Option.monte_carlo), "\n")
 
 print(call.rho(Option.binomial), put.rho(Option.binomial))
 print(call.rho(Option.monte_carlo), put.rho(Option.monte_carlo))
+
+# QQ:how to implement theta with Monte Carlo?
