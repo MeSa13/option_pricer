@@ -206,7 +206,7 @@ print(call.delta(Option.monte_carlo), put.delta(Option.monte_carlo), "\n")
 
 print(call.gamma(Option.binomial), put.gamma(Option.binomial))
 print(call.gamma(Option.monte_carlo, 10000), put.gamma(Option.monte_carlo, 10000), "\n")
-# binomial gamma is way off
+# QQ: binomial gamma is way off
 
 print(call.vega(Option.binomial), put.vega(Option.binomial))
 print(call.vega(Option.monte_carlo), put.vega(Option.monte_carlo), "\n")
