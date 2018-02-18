@@ -112,6 +112,9 @@ class Option:
         self.interest_rate -= eps
         return 0.01 * (price2 - price1) / eps
 
+    def theta(self, pricer, *args, eps=10 ** -3):
+        return self.interest_rate * self.asset.price * (1 - self.delta(pricer, *args, eps)) - self.asset.vol ** 2 \
+               * self.asset.price ** 2 * self.gamma(pricer, *args, eps) / 2.0
 
 class PutOption(Option):
     """something here!"""
