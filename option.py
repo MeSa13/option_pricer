@@ -11,7 +11,7 @@ class Asset:
 
     Attributes:
         price (float): asset price
-        vol (float): volatility of the asset. For example, 0.1 means 10% volatility
+        vol (float): volatility of the asset.
     """
 
     def __init__(self, price, vol):
@@ -19,7 +19,7 @@ class Asset:
 
         Args:
             price (float): asset price
-            vol (float): asset volatility
+            vol (float): asset volatility. Note that 0.1 means 10% volatility.
         """
         self.price = price
         self.vol = vol
@@ -366,16 +366,14 @@ class AsianOption(Option):
         Returns:
             price of the Asian option and its Monte Carlo error.
         """
+        # QQ how about adding monte_carlo_error to Option?
         price_list = []
         for i in range(sample):
             price_list.append(self.monte_carlo(number_simulation, steps))
         return np.mean(price_list), np.std(price_list)
 
-    def price(self, *args, error=False):
-        if error:
-            return self.monte_carlo_error(*args)
-        else:
-            return self.monte_carlo(*args)
+    def price(self, *args):
+        return self.monte_carlo(*args)
 
 
 ex_asset_price = 100.0
@@ -400,34 +398,44 @@ asian_put = AsianOption("Put", ex_stock, ex_strike, ex_term, ex_interest, ex_ave
 print("option price")
 print("European")
 print(eu_call_analytic.price(), eu_put_analytic.price())
-# print(eu_call_binomial.price(), eu_put_binomial.price())
-# print(eu_call_MC.price(), eu_put_MC.price())
-# print("American")
-# print(american_call.price(), american_put.price(), "\n")
+print(eu_call_binomial.price(), eu_put_binomial.price())
+print(eu_call_MC.price(), eu_put_MC.price())
+print("American")
+print(american_call.price(), american_put.price())
 print("Asian")
-print(asian_call.price(), asian_put.price())
-#
-# print("delta")
-# print(eu_call_analytic.delta(), eu_put_analytic.delta())
-# print(eu_call_binomial.delta(), eu_put_binomial.delta())
-# print(eu_call_MC.delta(), eu_put_MC.delta(), "\n")
-#
-# print("gamma")
-# print(eu_call_analytic.gamma(), eu_put_analytic.gamma())
-# print(eu_call_binomial.gamma(), eu_put_binomial.gamma())
-# print(eu_call_MC.gamma(), eu_put_MC.gamma(), "\n")
-#
-# print("vega")
-# print(eu_call_analytic.vega(), eu_put_analytic.vega())
-# print(eu_call_binomial.vega(), eu_put_binomial.vega())
-# print(eu_call_MC.vega(), eu_put_MC.vega(), "\n")
-#
-# print("rho")
-# print(eu_call_analytic.rho(), eu_put_analytic.rho())
-# print(eu_call_binomial.rho(), eu_put_binomial.rho())
-# print(eu_call_MC.rho(), eu_put_MC.rho(), "\n")
-#
-# print("theta")
-# print(eu_call_analytic.theta(), eu_put_analytic.theta())
-# print(eu_call_binomial.theta(), eu_put_binomial.theta())
-# print(eu_call_MC.theta(), eu_put_MC.theta(), "\n")
+print(asian_call.price(), asian_put.price(), "\n")
+
+print("delta")
+print(eu_call_analytic.delta(), eu_put_analytic.delta())
+print(eu_call_binomial.delta(), eu_put_binomial.delta())
+print(eu_call_MC.delta(), eu_put_MC.delta())
+print(american_call.delta(), american_put.delta())
+print(asian_call.delta(), asian_put.delta(), "\n")
+
+print("gamma")
+print(eu_call_analytic.gamma(), eu_put_analytic.gamma())
+print(eu_call_binomial.gamma(), eu_put_binomial.gamma())
+print(eu_call_MC.gamma(), eu_put_MC.gamma())
+print(american_call.gamma(), american_put.gamma())
+print(asian_call.gamma(), asian_put.gamma(), "\n")
+
+print("vega")
+print(eu_call_analytic.vega(), eu_put_analytic.vega())
+print(eu_call_binomial.vega(), eu_put_binomial.vega())
+print(eu_call_MC.vega(), eu_put_MC.vega())
+print(american_call.vega(), american_put.vega())
+print(asian_call.vega(), asian_put.vega(), "\n")
+
+print("rho")
+print(eu_call_analytic.rho(), eu_put_analytic.rho())
+print(eu_call_binomial.rho(), eu_put_binomial.rho())
+print(eu_call_MC.rho(), eu_put_MC.rho())
+print(american_call.rho(), american_put.rho())
+print(asian_call.rho(), asian_put.rho(), "\n")
+
+print("theta")
+print(eu_call_analytic.theta(), eu_put_analytic.theta())
+print(eu_call_binomial.theta(), eu_put_binomial.theta())
+print(eu_call_MC.theta(), eu_put_MC.theta())
+print(american_call.theta(), american_put.theta())
+print(asian_call.theta(), asian_put.theta(), "\n")
