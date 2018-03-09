@@ -4,10 +4,7 @@ import numpy as np
 import scipy.stats
 import time
 from abc import ABC, abstractmethod
-import copy
 
-# PDE and local volatility
-# payoff()
 # is monte_carlo error acceptable?
 
 
@@ -16,7 +13,7 @@ class Asset:
 
     Attributes:
         price (float): asset price
-        vol (function): local volatility of the asset.
+        vol (function): local volatility of the asset
     """
 
     def __init__(self, price, vol):
@@ -24,7 +21,7 @@ class Asset:
 
         self.price = price
         self.vol = vol
-        # if a float is passed for vol (e.g. constant volatility) make it a callable object
+        # if a float is passed for vol (constant volatility) make it a callable object
         if not callable(vol):
             self.vol = lambda x, y: vol
 
@@ -54,16 +51,16 @@ class Asset:
             t += dt
         return sim_price
 
-    def sim_plot(self, growth_rate, duration, time_step, num_sim=5):
-        """Plot simulation of asset price
+    def sim_plot(self, growth_rate, duration, step=100, num_sim=5): #How to specify time_step = duration/100 by default
+        """Plot simulation of the asset price movement
 
         Args:
             growth_rate (float): growth rate of the asset price, usually taken to be the free interest rate
             duration (float): duration of simulation
-            time_step (float): time step of each simulation
+            step (int): number of time steps in each simulation, defaults to 100
             num_sim (int): number of simulations, defaults to 5
         """
-        t = np.arange(0.0, duration, time_step)
+        t = np.arange(0.0, duration, duration/step)
         sim_price = self.simulate(duration, growth_rate, num_sim, len(t) - 1)
         plt.plot(t, np.transpose(sim_price))
         plt.show()
@@ -217,16 +214,9 @@ class EuropeanOption(Option):
         interest_rate (float): risk free interest rate
         pricing method (str): the main pricing method for the option, "Binomial", "MonteCarlo" or "Analytic"
     """
-    def Foo(self, sigma):
-        asset = Asset(self.asset.price, sigma)
-        option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
-        return option.price()
 
     def analytic(self):
-        """Price a European option with Black-Scholes-Merton analytic formula.
-
-        It assumes a constant volatility.
-        """
+        """Price a European option with Black-Scholes-Merton analytic formula, assuming a constant volatility."""
         vol = self.asset.vol(1.0, 0.0)
         d1 = (np.log(self.asset.price / self.strike)
               + (self.interest_rate + vol ** 2 / 2) * self.term) \
@@ -245,7 +235,7 @@ class EuropeanOption(Option):
         Args:
             step (int): number of layers in the tree. Defaults to 1000.
         Returns:
-            price of the European option
+            price of the European option (float)
         """
         dt = 1.0 * self.term / step
         a = np.exp(self.interest_rate * dt)
@@ -299,7 +289,7 @@ class EuropeanOption(Option):
         Args:
             step (int): number of layers in the tree. Defaults to 1000.
         Returns:
-            price of the European option
+            price of the European option (float)
         """
         vol = self.asset.vol(1.0, 0.0)
         dt = 1.0 * self.term / step
@@ -331,7 +321,7 @@ class EuropeanOption(Option):
             number_simulation (int): number of Monte Carlo simulations. Defaults to 10,000.
             steps (int): length of each Monte Carlo simulations. Defaults to 100.
         Returns:
-            price of the European option
+            price of the European option (float)
         """
         simulations = self.asset.simulate(self.term, self.interest_rate, number_simulation, steps)
         # list of asset prices at maturity QQ: should I include comments like this
@@ -340,21 +330,26 @@ class EuropeanOption(Option):
         price = np.exp(-self.interest_rate * self.term) * np.mean(payoff_list)
         return price
 
-    def pde_pricing(self, dx, grid_size=4.0, ratio=1.0):
-        """Price a European option by solving Black-Scholes-Merton differential equation
+    def pde(self, dx, grid_size=4.0, ratio=1.0):
+        """Price a European option by solving Black-Scholes differential equation
 
         Args:
             dx (float): spatial grid separation
-            grid_size (float): size of spatial grid
+            grid_size (float): size of spatial grid, defaults to 4
             ratio (float): controlling time step size
         Returns:
-            price of the European option
+            price of the European option (float)
         """
+        # a change of variable in Black-Scholes equation is performed, as x= ln(s), s = asset price.
         dt = ratio * dx ** 2
         t = self.term
+        # Normalizing prices by strike, to work with order 1 numbers.
         normalized_price = self.asset.price / self.strike
+        # normalized strike is 1.
         k = 1.0
+        # [-n, n] range in x corresponds to [k e^(-n), k e^n] in s.
         x = np.arange(-grid_size, grid_size + dx, dx)
+        # evaluating option price at maturity
         if self.option_type == "Call":
             option_price = np.maximum(np.exp(x) - k, 0)
         else:
@@ -362,6 +357,8 @@ class EuropeanOption(Option):
         while t > 0:
             temp_price = option_price
             t -= dt
+            # updating option price. The first and last element in option_price
+            # need to be updated by boundary conditions.
             for i in range(1, len(x) - 1):
                 sigma = self.asset.vol(np.exp(x[i]), t)
                 option_price[i] = temp_price[i] * (1 - sigma ** 2 * dt / dx ** 2 - self.interest_rate * dt) \
@@ -369,9 +366,12 @@ class EuropeanOption(Option):
                                   (sigma ** 2 * dt / dx ** 2 + (self.interest_rate - 0.5 * sigma ** 2) * dt / dx) \
                                   + 0.5 * temp_price[i - 1] * \
                                   (sigma ** 2 * dt / dx ** 2 - (self.interest_rate - 0.5 * sigma ** 2) * dt / dx)
+            # updating boundary values
             if self.option_type == "Put":
                 option_price[0] *= np.exp(-self.interest_rate * dt)
+        # corresponding value to the asset price in terms of x
         x0 = np.log(normalized_price)
+        # taking the average of two elements closest to x0 in option_price and renormalize the price
         price = self.strike * (option_price[x > x0][0] + option_price[x < x0][-1]) / 2.0
         return price
 
@@ -383,6 +383,31 @@ class EuropeanOption(Option):
             return self.monte_carlo(*args)
         elif self.pricing_method == "Analytic":
             return self.analytic()
+
+    def implied_vol(self, price, top_vol=1.0, bot_vol=0.001, accuracy=0.05):
+        """Calculate the implied volatility of an option using bisection method
+
+        This method solves for the volatility of an option given its price.
+        Args:
+            price (float): traded price of the option
+            top_vol (float): high value of volatility in bisection method
+            bot_vol (float): low value of volatility in bisection method
+            accuracy (float): the acceptable amount of error in the solution
+        Returns:
+            implied volatility of the option (float)
+        """
+        asset = Asset(self.asset.price, 0.5 * (top_vol + bot_vol))
+        eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
+        price_guess = eu_option.price()
+        while abs(price - price_guess) > accuracy:
+            if price_guess > price:
+                top_vol = 0.5 * (top_vol + bot_vol)
+            else:
+                bot_vol = 0.5 * (top_vol + bot_vol)
+            asset = Asset(self.asset.price, 0.5 * (top_vol + bot_vol))
+            eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
+            price_guess = eu_option.price()
+        return 0.5 * (top_vol + bot_vol)
 
 
 class AmericanOption(Option):
@@ -457,6 +482,7 @@ class AmericanOption(Option):
         return option_price[0, 0]
 
     def price(self, *args):
+        """Price American option"""
         return self.binomial(*args)
 
 
@@ -506,14 +532,21 @@ class AsianOption(Option):
         Returns:
             price of the Asian option and its Monte Carlo error.
         """
-        # QQ how about adding monte_carlo_error to Option?
         price_list = []
         for i in range(sample):
             price_list.append(self.monte_carlo(number_simulation, steps))
         return np.mean(price_list), np.std(price_list)
 
     def price(self, *args):
+        """Price Asian option"""
         return self.monte_carlo(*args)
+
+    def effective_vol(self, top_vol=1.0, bot_vol=0.001, accuracy=0.05, *args):
+        """Find the volatility of a European option with similar properties and price of the Asian option"""
+        price = self.monte_carlo_error(*args)[0]
+        asset = Asset(self.asset.price, 1.0)
+        eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
+        return eu_option.implied_vol(price, top_vol=top_vol, bot_vol=bot_vol, accuracy=accuracy)
 
 
 ex_vol = 0.2
@@ -539,42 +572,39 @@ ex_average_period = 0.2
 asian_call = AsianOption("Call", ex_stock, ex_strike, ex_term, ex_interest, ex_average_period)
 asian_put = AsianOption("Put", ex_stock, ex_strike, ex_term, ex_interest, ex_average_period)
 
-av_period_list = np.arange(0.01, 0.55, 0.05)
-rate_list = [0.02, 0.04, 0.08]
-sigma_list_list = []
-type_list = ["Call", "Put"]
-for ty in type_list:
-    for rate in rate_list:
-        price_list = []
-        for av_period in av_period_list:
-            asian_call = AsianOption(ty, ex_stock, ex_strike, ex_term, ex_interest, av_period)
-            price_list.append(asian_call.monte_carlo_error()[0])
-            print("hooray")
-        sigma_list = []
-        for price in price_list:
-            vol1 = ex_vol
-            vol2 = 0.001
-            stock = Asset(ex_asset_price, vol1)
-            eu_call = EuropeanOption(ty, stock, ex_strike, ex_term, ex_interest, "Analytic")
-            price1 = eu_call.Foo(vol1)
-            price2 = eu_call.Foo(vol2)
-            price3 = eu_call.Foo(0.5*(vol1+vol2))
-            while abs(price - price3) > 0.05:
-                if price3 > price:
-                    vol1 = 0.5*(vol1+vol2)
-                else:
-                    vol2 = 0.5*(vol1+vol2)
-                price3 = eu_call.Foo(0.5*(vol1+vol2))
-            sigma_list.append(0.5*(vol1+vol2))
-        sigma_list_list.append(sigma_list)
-
-plt.plot(av_period_list, sigma_list_list[0], 'b-', av_period_list, sigma_list_list[1], 'g-', av_period_list, sigma_list_list[2], 'r-')
-plt.plot(av_period_list, sigma_list_list[3], 'b--', av_period_list, sigma_list_list[4], 'g--', av_period_list, sigma_list_list[5], 'r--')
+rate_list = [0.02, 0.08]
+av_period_list = np.arange(0.01, 0.5, 0.05)
+plot_list = []
+for rate in rate_list:
+    temp_rate = asian_call.interest_rate
+    asian_call.interest_rate = rate
+    sigma_list = []
+    for av_period in av_period_list:
+        temp_av_period = asian_call.average_period
+        asian_call.average_period = av_period
+        sigma_list.append(asian_call.effective_vol())
+        asian_call.average_period = temp_av_period
+    asian_call.interest_rate = temp_rate
+    plot, = plt.plot(av_period_list, sigma_list)
+    plot_list.append(plot)
+for rate in rate_list:
+    temp_rate = asian_put.interest_rate
+    asian_put.interest_rate = rate
+    sigma_list = []
+    for av_period in av_period_list:
+        temp_av_period = asian_put.average_period
+        asian_put.average_period = av_period
+        sigma_list.append(asian_put.effective_vol())
+        asian_put.average_period = temp_av_period
+    asian_put.interest_rate = temp_rate
+    plot, = plt.plot(av_period_list, sigma_list, "--")
+    plot_list.append(plot)
+plt.legend(plot_list, ["Call r=0.02", "Call r=0.08", "Put r=0.02", "Put r=0.08"])
 plt.xlabel("% average period")
 plt.ylabel("effective volatility")
 plt.show()
 
-# print(eu_call_analytic.pde_pricing(0.01, ratio=1.0))
+# print(eu_call_analytic.pde(0.01, ratio=1.0))
 
 # print("option price")
 # print("European")
