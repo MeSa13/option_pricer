@@ -361,11 +361,11 @@ class EuropeanOption(Option):
             # need to be updated by boundary conditions.
             for i in range(1, len(x) - 1):
                 sigma = self.asset.vol(np.exp(x[i]), t)
-                option_price[i] = temp_price[i] * (1 - sigma ** 2 * dt / dx ** 2 - self.interest_rate * dt) \
+                option_price[i] = temp_price[i] * (1 - sigma ** 2 * ratio - self.interest_rate * dt) \
                                   + 0.5 * temp_price[i + 1] * \
-                                  (sigma ** 2 * dt / dx ** 2 + (self.interest_rate - 0.5 * sigma ** 2) * dt / dx) \
+                                  (sigma ** 2 * ratio + (self.interest_rate - 0.5 * sigma ** 2) * ratio * dx) \
                                   + 0.5 * temp_price[i - 1] * \
-                                  (sigma ** 2 * dt / dx ** 2 - (self.interest_rate - 0.5 * sigma ** 2) * dt / dx)
+                                  (sigma ** 2 * ratio - (self.interest_rate - 0.5 * sigma ** 2) * ratio * dx)
             # updating boundary values
             if self.option_type == "Put":
                 option_price[0] *= np.exp(-self.interest_rate * dt)
@@ -542,7 +542,7 @@ class AsianOption(Option):
         return self.monte_carlo(*args)
 
     def effective_vol(self, top_vol=1.0, bot_vol=0.001, accuracy=0.05, *args):
-        """Find the volatility of a European option with similar properties and price of the Asian option"""
+        """Calculate the volatility of a European option with similar properties and price of the Asian option"""
         price = self.monte_carlo_error(*args)[0]
         asset = Asset(self.asset.price, 1.0)
         eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
