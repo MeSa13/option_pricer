@@ -5,12 +5,12 @@ At the moment, this code includes pricing of call/put european, american and asi
 
 Features so far
 * Asset:
-  Simulation of geometric Brownian movement of the asset price  
+  Simulation of geometric Brownian movement of the asset price
 * European: 
-  Analytic, binomial, Monte Carlo and PDE pricing
+  Analytic, binomial, Monte Carlo and PDE pricing,
   Implied volatility calculation
 * American:
   Binomial pricing
 * Asian:
-  Monte Carlo pricing
+  Monte Carlo pricing,
   Effective volatility of an asian option
