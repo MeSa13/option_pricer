@@ -1,7 +1,16 @@
-# option_pricer
-pricing different kind of options through a variety of methods using python.
+#  option pricer
+pricing different type of options by analytical, binomial, Monte Carlo and PDE methods.
 
-At the moment, the option pricer is restricted to European/American call/put options. I use three different methods for pricing:
-1- analytic evaluation through Black-Scholes-Merton formula. This is mainly to judge the accuracy of the other methods, and is only viable for Eu options.
-2- Monte Carlo method. This does not work for American options.
-3- Binomial tree for both American and European options.
+At the moment, this code includes pricing of call/put european, american and asian options.
+
+Features so far
+* Asset:
+  Simulation of geometric Brownian movement of the asset price  
+* European: 
+  Analytic, binomial, Monte Carlo and PDE pricing
+  Implied volatility calculation
+* American:
+  Binomial pricing
+* Asian:
+  Monte Carlo pricing
+  Effective volatility of an asian option
