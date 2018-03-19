@@ -1,11 +1,8 @@
-# from numpy import linspace
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats
-import time
+import scipy.optimize
 from abc import ABC, abstractmethod
-
-# is monte_carlo error acceptable?
 
 
 class Asset:
@@ -20,10 +17,8 @@ class Asset:
         """Initialize Asset"""
 
         self.price = price
-        self.vol = vol
         # if a float is passed for vol (constant volatility) make it a callable object
-        if not callable(vol):
-            self.vol = lambda x, y: vol
+        self.vol = vol if callable(vol) else lambda x, y: vol
 
     def simulate(self, duration, growth_rate, number_simulations, steps):
         """Simulate a geometric Brownian motion of the asset price
@@ -40,10 +35,9 @@ class Asset:
         dt = duration / steps
         # Current asset price is the first column in sim_price
         sim_price = np.ones((number_simulations, 1)) * self.price
-        vol = self.vol
         t = 0
         for i in range(steps):
-            mov_coeff = 1.0 + growth_rate * dt + vol(sim_price[:, i], t) * np.sqrt(dt) * normal_seeds[:, i]
+            mov_coeff = 1.0 + growth_rate * dt + self.vol(sim_price[:, i], t) * np.sqrt(dt) * normal_seeds[:, i]
             new_price = sim_price[:, i] * mov_coeff
             # making new_price a column vector
             new_price.shape = (number_simulations, 1)
@@ -51,7 +45,7 @@ class Asset:
             t += dt
         return sim_price
 
-    def sim_plot(self, growth_rate, duration, step=100, num_sim=5): #How to specify time_step = duration/100 by default
+    def sim_plot(self, growth_rate, duration, step=100, num_sim=5):
         """Plot simulation of the asset price movement
 
         Args:
@@ -64,6 +58,44 @@ class Asset:
         sim_price = self.simulate(duration, growth_rate, num_sim, len(t) - 1)
         plt.plot(t, np.transpose(sim_price))
         plt.show()
+
+    def asset_tree(self, t, step):
+        """Form asset price tree for binomial pricing
+
+        Args:
+            t (float): time duration
+            step (integer): number of steps in the tree
+        Returns:
+        (step+1)*(step+1) matrix of prices
+        """
+        dt = 1.0 * t / step
+        # making the binomial tree as a matrix. [i,j] element represents the price after i up movements and j
+        # down movements in price of the asset. Elements with i+j=n correspond to the nth layer of the tree.
+
+        # making the asset price tree.
+        tree = np.zeros((step + 1, step + 1))
+        tree[0, 0] = self.price
+        # evaluating elements resulting from only up movements in the asset price ([i,0]).
+        for up_mov in range(1, step + 1):
+            # up movement factor in price of the asset
+            u = np.exp(self.vol(tree[up_mov - 1, 0], (up_mov - 1) * dt) * np.sqrt(dt))
+            tree[up_mov, 0] = tree[up_mov - 1, 0] * u
+        # evaluating elements resulting from only down movements in the asset price ([0,i]).
+        for down_mov in range(1, step + 1):
+            # down movement factor in price of the asset
+            d = np.exp(-self.vol(tree[0, down_mov - 1], (down_mov - 1) * dt) * np.sqrt(dt))
+            tree[0, down_mov] = tree[0, down_mov - 1] * d
+        # evaluating the whole asset_tree, going by each layer of the tree
+        for layer in range(1, step + 1):
+            for up_mov in range(1, layer):
+                down_mov = layer - up_mov
+                u = np.exp(self.vol(tree[up_mov - 1, down_mov], (layer - 1) * dt) * np.sqrt(dt))
+                d = np.exp(-self.vol(tree[up_mov, down_mov - 1], (layer - 1) * dt) * np.sqrt(dt))
+                # taking the average of the price coming from one up movement or one down movement before. For
+                # constant volatility these two are the same. For local volatility depending on asset price
+                # they are different.
+                tree[up_mov, down_mov] = (u * tree[up_mov - 1, down_mov] + d * tree[up_mov, down_mov - 1]) / 2.0
+        return tree
 
 
 class Option(ABC):
@@ -113,7 +145,7 @@ class Option(ABC):
         """Calculate delta of the option
 
         Args:
-            *args: QQ
+            *args:
             eps (float): finite difference derivative. Defaults to 0.01
         Returns:
             delta of the option
@@ -238,39 +270,17 @@ class EuropeanOption(Option):
             price of the European option (float)
         """
         dt = 1.0 * self.term / step
-        a = np.exp(self.interest_rate * dt)
         # making the binomial tree as a matrix. [i,j] element represents the price after i up movements and j
         # down movements in price of the asset. Elements with i+j=n correspond to the nth layer of the tree.
 
         # making the asset price tree.
-        asset_tree = np.zeros((step + 1, step + 1))
-        asset_tree[0, 0] = self.asset.price
-        # evaluating elements resulting from only up movements in the asset price ([i,0]).
-        for up_mov in range(1, step + 1):
-            # up movement factor in price of the asset
-            u = np.exp(self.asset.vol(asset_tree[up_mov - 1, 0], (up_mov - 1) * dt) * np.sqrt(dt))
-            asset_tree[up_mov, 0] = asset_tree[up_mov - 1, 0] * u
-        # evaluating elements resulting from only down movements in the asset price ([0,i]).
-        for down_mov in range(1, step + 1):
-            # down movement factor in price of the asset
-            d = np.exp(-self.asset.vol(asset_tree[0, down_mov - 1], (down_mov - 1) * dt) * np.sqrt(dt))
-            asset_tree[0, down_mov] = asset_tree[0, down_mov - 1] * d
-        # evaluating the whole asset_tree, going by each layer of the tree
-        for layer in range(1, step + 1):
-            for up_mov in range(1, layer):
-                down_mov = layer - up_mov
-                u = np.exp(self.asset.vol(asset_tree[up_mov - 1, down_mov], (layer - 1) * dt) * np.sqrt(dt))
-                d = np.exp(-self.asset.vol(asset_tree[up_mov, down_mov - 1], (layer - 1) * dt) * np.sqrt(dt))
-                # taking the average of the price coming from one up movement or one down movement before. For
-                # constant volatility these two are the same. For local volatility depending on asset price
-                # they are different.
-                asset_tree[up_mov, down_mov] = (u * asset_tree[up_mov - 1, down_mov] +
-                                                d * asset_tree[up_mov, down_mov - 1]) / 2.0
+        asset_tree = self.asset.asset_tree(self.term, step)
+        a = np.exp(self.interest_rate * dt)
         # making the option price tree.
-        option_price = np.zeros((step + 1, step + 1))
+        option_tree = np.zeros((step + 1, step + 1))
         # pricing the option at maturity. [i,j] elements with i+j=step correspond to maturity.
         for up_mov in range(step + 1):
-            option_price[up_mov, step - up_mov] = self.payoff(asset_tree[up_mov, step - up_mov])
+            option_tree[up_mov, step - up_mov] = self.payoff(asset_tree[up_mov, step - up_mov])
         # pricing the option from the maturity layer backwards
         for layer in range(step - 1, -1, -1):
             for up_mov in range(layer + 1):
@@ -279,12 +289,12 @@ class EuropeanOption(Option):
                 d = np.exp(-self.asset.vol(asset_tree[up_mov, down_mov], layer * dt) * np.sqrt(dt))
                 # probability of up movement in the price of the asset
                 p = (a - d) / (u - d)
-                option_price[up_mov, down_mov] = (p * option_price[up_mov + 1, down_mov]
-                                                  + (1 - p) * option_price[up_mov, down_mov + 1]) / a
-        return option_price[0, 0]
+                option_tree[up_mov, down_mov] = (p * option_tree[up_mov + 1, down_mov]
+                                                  + (1 - p) * option_tree[up_mov, down_mov + 1]) / a
+        return option_tree[0, 0]
 
-    def binomial_const_vol(self, step=1000):
-        """Price a European option with Binomial tree method
+    def binomial_constant_vol(self, step=1000):
+        """Price a European option with Binomial tree method for constant volatility
 
         Args:
             step (int): number of layers in the tree. Defaults to 1000.
@@ -324,7 +334,7 @@ class EuropeanOption(Option):
             price of the European option (float)
         """
         simulations = self.asset.simulate(self.term, self.interest_rate, number_simulation, steps)
-        # list of asset prices at maturity QQ: should I include comments like this
+        # list of asset prices at maturity
         asset_price_list = simulations[:, -1]
         payoff_list = self.payoff(asset_price_list)
         price = np.exp(-self.interest_rate * self.term) * np.mean(payoff_list)
@@ -384,30 +394,23 @@ class EuropeanOption(Option):
         elif self.pricing_method == "Analytic":
             return self.analytic()
 
-    def implied_vol(self, price, top_vol=1.0, bot_vol=0.001, accuracy=0.05):
+    def implied_vol(self, realized_price, top_vol=1.0, bot_vol=0.001):
         """Calculate the implied volatility of an option using bisection method
 
         This method solves for the volatility of an option given its price.
         Args:
-            price (float): traded price of the option
+            realized_price (float): traded price of the option
             top_vol (float): high value of volatility in bisection method
             bot_vol (float): low value of volatility in bisection method
-            accuracy (float): the acceptable amount of error in the solution
         Returns:
             implied volatility of the option (float)
         """
-        asset = Asset(self.asset.price, 0.5 * (top_vol + bot_vol))
-        eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
-        price_guess = eu_option.price()
-        while abs(price - price_guess) > accuracy:
-            if price_guess > price:
-                top_vol = 0.5 * (top_vol + bot_vol)
-            else:
-                bot_vol = 0.5 * (top_vol + bot_vol)
-            asset = Asset(self.asset.price, 0.5 * (top_vol + bot_vol))
+        # Make the target function to look for its root
+        def target_function(sigma):
+            asset = Asset(self.asset.price, sigma)
             eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
-            price_guess = eu_option.price()
-        return 0.5 * (top_vol + bot_vol)
+            return eu_option.price() - realized_price
+        return scipy.optimize.bisect(target_function, top_vol, bot_vol)
 
 
 class AmericanOption(Option):
@@ -434,34 +437,12 @@ class AmericanOption(Option):
             price of the American option
         """
         dt = 1.0 * self.term / step
-        a = np.exp(self.interest_rate * dt)
         # making the binomial tree as a matrix. [i,j] element represents the price after i up movements and j
         # down movements in price of the asset. Elements with i+j=n correspond to the nth layer of the tree.
 
         # making the asset price tree.
-        asset_tree = np.zeros((step + 1, step + 1))
-        asset_tree[0, 0] = self.asset.price
-        # evaluating elements resulting from only up movements in the asset price ([i,0]).
-        for up_mov in range(1, step + 1):
-            # up movement factor in price of the asset
-            u = np.exp(self.asset.vol(asset_tree[up_mov - 1, 0], (up_mov - 1) * dt) * np.sqrt(dt))
-            asset_tree[up_mov, 0] = asset_tree[up_mov - 1, 0] * u
-        # evaluating elements resulting from only down movements in the asset price ([0,i]).
-        for down_mov in range(1, step + 1):
-            # down movement factor in price of the asset
-            d = np.exp(-self.asset.vol(asset_tree[0, down_mov - 1], (down_mov - 1) * dt) * np.sqrt(dt))
-            asset_tree[0, down_mov] = asset_tree[0, down_mov - 1] * d
-        # evaluating the whole asset_tree, going by each layer of the tree
-        for layer in range(1, step + 1):
-            for up_mov in range(1, layer):
-                down_mov = layer - up_mov
-                u = np.exp(self.asset.vol(asset_tree[up_mov - 1, down_mov], (layer - 1) * dt) * np.sqrt(dt))
-                d = np.exp(-self.asset.vol(asset_tree[up_mov, down_mov - 1], (layer - 1) * dt) * np.sqrt(dt))
-                # taking the average of the price coming from one up movement or one down movement before. For
-                # constant volatility these two are the same. For local volatility depending on asset price
-                # they are different.
-                asset_tree[up_mov, down_mov] = (u * asset_tree[up_mov - 1, down_mov] +
-                                                d * asset_tree[up_mov, down_mov - 1]) / 2.0
+        asset_tree = self.asset.asset_tree(self.term, step)
+        a = np.exp(self.interest_rate * dt)
         # making the option price tree.
         option_price = np.zeros((step + 1, step + 1))
         # pricing the option at maturity. [i,j] elements with i+j=step correspond to maturity.
@@ -541,112 +522,10 @@ class AsianOption(Option):
         """Price Asian option"""
         return self.monte_carlo(*args)
 
-    def effective_vol(self, top_vol=1.0, bot_vol=0.001, accuracy=0.05, *args):
+    def effective_vol(self, top_vol=1.0, bot_vol=0.001, *args):
         """Calculate the volatility of a European option with similar properties and price of the Asian option"""
         price = self.monte_carlo_error(*args)[0]
         asset = Asset(self.asset.price, 1.0)
         eu_option = EuropeanOption(self.option_type, asset, self.strike, self.term, self.interest_rate, "Analytic")
-        return eu_option.implied_vol(price, top_vol=top_vol, bot_vol=bot_vol, accuracy=accuracy)
+        return eu_option.implied_vol(price, top_vol=top_vol, bot_vol=bot_vol)
 
-
-ex_vol = 0.2
-ex_asset_price = 100.0
-ex_stock = Asset(ex_asset_price, ex_vol)
-
-# ex_stock.sim_plot(0.02, 1.0, 0.01)
-
-ex_strike = 100.0
-ex_term = 1.0
-ex_interest = 0.02
-
-eu_call_analytic = EuropeanOption("Call", ex_stock, ex_strike, ex_term, ex_interest, "Analytic")
-eu_call_binomial = EuropeanOption("Call", ex_stock, ex_strike, ex_term, ex_interest, "Binomial")
-eu_call_MC = EuropeanOption("Call", ex_stock, ex_strike, ex_term, ex_interest, "MonteCarlo")
-eu_put_analytic = EuropeanOption("Put", ex_stock, ex_strike, ex_term, ex_interest, "Analytic")
-eu_put_binomial = EuropeanOption("Put", ex_stock, ex_strike, ex_term, ex_interest, "Binomial")
-eu_put_MC = EuropeanOption("Put", ex_stock, ex_strike, ex_term, ex_interest, "MonteCarlo")
-american_call = AmericanOption("Call", ex_stock, ex_strike, ex_term, ex_interest)
-american_put = AmericanOption("Put", ex_stock, ex_strike, ex_term, ex_interest)
-
-ex_average_period = 0.2
-asian_call = AsianOption("Call", ex_stock, ex_strike, ex_term, ex_interest, ex_average_period)
-asian_put = AsianOption("Put", ex_stock, ex_strike, ex_term, ex_interest, ex_average_period)
-
-rate_list = [0.02, 0.08]
-av_period_list = np.arange(0.01, 0.5, 0.05)
-plot_list = []
-for rate in rate_list:
-    temp_rate = asian_call.interest_rate
-    asian_call.interest_rate = rate
-    sigma_list = []
-    for av_period in av_period_list:
-        temp_av_period = asian_call.average_period
-        asian_call.average_period = av_period
-        sigma_list.append(asian_call.effective_vol())
-        asian_call.average_period = temp_av_period
-    asian_call.interest_rate = temp_rate
-    plot, = plt.plot(av_period_list, sigma_list)
-    plot_list.append(plot)
-for rate in rate_list:
-    temp_rate = asian_put.interest_rate
-    asian_put.interest_rate = rate
-    sigma_list = []
-    for av_period in av_period_list:
-        temp_av_period = asian_put.average_period
-        asian_put.average_period = av_period
-        sigma_list.append(asian_put.effective_vol())
-        asian_put.average_period = temp_av_period
-    asian_put.interest_rate = temp_rate
-    plot, = plt.plot(av_period_list, sigma_list, "--")
-    plot_list.append(plot)
-plt.legend(plot_list, ["Call r=0.02", "Call r=0.08", "Put r=0.02", "Put r=0.08"])
-plt.xlabel("% average period")
-plt.ylabel("effective volatility")
-plt.show()
-
-# print(eu_call_analytic.pde(0.01, ratio=1.0))
-
-# print("option price")
-# print("European")
-# print(eu_call_analytic.price(), eu_put_analytic.price())
-# print(eu_call_binomial.price(), eu_put_binomial.price())
-# print(eu_call_MC.price(), eu_put_MC.price())
-# print("American")
-# print(american_call.price(), american_put.price())
-# print("Asian")
-# print(asian_call.price(), asian_put.price(), "\n")
-#
-# print("delta")
-# print(eu_call_analytic.delta(), eu_put_analytic.delta())
-# print(eu_call_binomial.delta(), eu_put_binomial.delta())
-# print(eu_call_MC.delta(), eu_put_MC.delta())
-# print(american_call.delta(), american_put.delta())
-# print(asian_call.delta(), asian_put.delta(), "\n")
-#
-# print("gamma")
-# print(eu_call_analytic.gamma(), eu_put_analytic.gamma())
-# print(eu_call_binomial.gamma(), eu_put_binomial.gamma())
-# print(eu_call_MC.gamma(), eu_put_MC.gamma())
-# print(american_call.gamma(), american_put.gamma())
-# print(asian_call.gamma(), asian_put.gamma(), "\n")
-#
-# print("vega")
-# print(eu_call_analytic.vega(), eu_put_analytic.vega())
-# print(eu_call_binomial.vega(), eu_put_binomial.vega())
-# print(eu_call_MC.vega(), eu_put_MC.vega())
-# print(american_call.vega(), american_put.vega())
-# print(asian_call.vega(), asian_put.vega(), "\n")
-#
-# print("rho")
-# print(eu_call_analytic.rho(), eu_put_analytic.rho())
-# print(eu_call_binomial.rho(), eu_put_binomial.rho())
-# print(eu_call_MC.rho(), eu_put_MC.rho())
-# print(american_call.rho(), american_put.rho())
-# print(asian_call.rho(), asian_put.rho(), "\n")
-#
-# print("theta")
-# print(eu_call_analytic.theta(), eu_put_analytic.theta())
-# print(eu_call_binomial.theta(), eu_put_binomial.theta())
-# print(eu_call_MC.theta(), eu_put_MC.theta())
-# print(american_call.theta(), american_put.theta())
-# print(asian_call.theta(), asian_put.theta(), "\n")
