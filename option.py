@@ -1,3 +1,14 @@
+"""option.py
+~~~~~~~~~~~~~~~~~~~~~
+Pricing financial derivatives, particularly options.
+For each type of option (European, American, etc.), a range of pricing methods
+are introduced and Greeks are calculated.
+
+"""
+
+
+### Libraries
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats
@@ -25,7 +36,7 @@ class Asset:
 
         Args:
             duration (float): time duration of the simulation
-            growth_rate (float): growth rate of the geometric Brownian motion
+            growth_rate (float): growth rate (per unit time) of the geometric Brownian motion
             number_simulations (int): number of simulations
             steps (int): number of steps in each simulation
         Returns:
@@ -37,8 +48,8 @@ class Asset:
         sim_price = np.ones((number_simulations, 1)) * self.price
         t = 0
         for i in range(steps):
-            mov_coeff = 1.0 + growth_rate * dt + self.vol(sim_price[:, i], t) * np.sqrt(dt) * normal_seeds[:, i]
-            new_price = sim_price[:, i] * mov_coeff
+            growth_coeff = 1.0 + growth_rate * dt + self.vol(sim_price[:, i], t) * np.sqrt(dt) * normal_seeds[:, i]
+            new_price = sim_price[:, i] * growth_coeff
             # making new_price a column vector
             new_price.shape = (number_simulations, 1)
             sim_price = np.append(sim_price, new_price, axis=1)
