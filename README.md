@@ -14,3 +14,7 @@ Features so far
 * Asian:
   Monte Carlo pricing,
   Effective volatility of an asian option
+
+
+PDE method for pricing is implemented, but is still not fully verified in regards to 
+convergence and numerical errors.
