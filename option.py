@@ -68,6 +68,8 @@ class Asset:
         t = np.arange(0.0, duration, duration/step)
         sim_price = self.simulate(duration, growth_rate, num_sim, len(t) - 1)
         plt.plot(t, np.transpose(sim_price))
+        plt.xlabel("time")
+        plt.ylabel("asset price")
         plt.show()
 
     def asset_tree(self, t, step):
