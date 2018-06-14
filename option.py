@@ -246,7 +246,7 @@ class Option(ABC):
         self.term -= eps
         price2 = self.price(*args)
         self.term += eps
-        return (price1 - price2) / (365 * eps)
+        return (price2 - price1) / (365 * eps)
 
 
 class EuropeanOption(Option):
