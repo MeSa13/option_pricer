@@ -194,7 +194,7 @@ class Option(ABC):
         return (price2 + price3 - 2.0 * price1) / eps ** 2
 
     def vega(self, *args, eps=0.01):
-        """Calculate vega of the option
+        """Calculate vega of the option. This method assumes constant volatility.
 
         Args:
             *args:
@@ -205,10 +205,11 @@ class Option(ABC):
         # Fix the random generator seed for MonteCarlo pricing
         st = np.random.get_state()
         price1 = self.price(*args)
-        self.asset.vol += eps
+        vol_function = self.asset.vol
+        self.asset.vol = lambda x,y: eps + vol_function(self.asset.price, 0.0)
         np.random.set_state(st)
         price2 = self.price(*args)
-        self.asset.vol -= eps
+        self.asset.vol = vol_function
         return 0.01 * (price2 - price1) / eps
 
     def rho(self, *args, eps=0.01):
