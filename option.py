@@ -308,7 +308,9 @@ class EuropeanOption(Option):
         return option_tree[0, 0]
 
     def binomial_constant_vol(self, step=1000):
-        """Price a European option with Binomial tree method for constant volatility
+        """
+        Price a European option with Binomial tree method when volatility is constant.
+        For a constant volatility, this method is faster compared to ``binomial`` method. 
 
         Args:
             step (int): number of layers in the tree. Defaults to 1000.
